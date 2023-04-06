@@ -5,7 +5,7 @@ import { IWillBase } from "./interfaces/IWillBase.sol";
 
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-contract MultisigWallet is Ownable2Step {
+contract Multisig is Ownable2Step {
 
     event Execute();
     event Confirm(address indexed owner);
