@@ -3,9 +3,8 @@ pragma solidity ^0.8.13;
 
 import { IWillBase } from "./interfaces/IWillBase.sol";
 
-import "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-contract Multisig is Ownable2Step {
+contract Multisig  {
 
     event Execute();
     event Confirm(address indexed owner);
