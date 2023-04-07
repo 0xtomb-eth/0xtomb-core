@@ -10,6 +10,29 @@ import { IWillBase } from "./interfaces/IWillBase.sol";
 contract WillBase is IWillBase {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableMap for EnumerableMap.AddressToUintMap;
+
+    event AllocationSet(
+        address indexed owner,
+        address indexed asset,
+        address[] beneficiaries,
+        uint256[] percentages
+    );
+
+    event DeathValidatorsSet(
+        address indexed owner,
+        address[] validators,
+        uint256 votingThreshold
+    );
+
+    event WillExecuted(
+        address indexed owner
+    );
+
+    event DeathAcknowledged(
+        address deadPeople,
+        address validator,
+        bool acknowledged
+    );
     
     struct Allocation {
         address[] beneficiaries;  // 受益人地址
@@ -40,29 +63,12 @@ contract WillBase is IWillBase {
 
         allocation.beneficiaries = beneficiaries;
         allocation.percentages = percentages;
+
+        emit AllocationSet(msg.sender, asset, beneficiaries, percentages);
     }
 
-    function executeWill() external {
-        require(!willStatuses[msg.sender]);
-        for (uint256 i=0; i < userAssets[msg.sender].length(); i++) {
-            address assetAddr = userAssets[msg.sender].at(i);
-            uint256 balance = IERC20(assetAddr).balanceOf(msg.sender);
-            Allocation storage allocation = allocations[msg.sender][assetAddr];
 
-            for (uint256 j = 0; j < allocation.beneficiaries.length; j++) {
-                address beneficiary = allocation.beneficiaries[j];
-                uint256 percentage = allocation.percentages[j];
-                uint256 amountToTransfer = (balance * percentage) / 100;
-                
-                // Transfer the tokens to beneficiaries
-                IERC20(assetAddr).transferFrom(msg.sender, beneficiary, amountToTransfer);
-            }
-        }
-
-        willStatuses[msg.sender] = true;
-    }
-
-    function setDeathValidators(address[] calldata validators, uint256 votingThreshold) public {
+    function setDeathValidators(address[] calldata validators, uint256 votingThreshold) external {
         // clear
         uint256 length = deathAck[msg.sender].validatorAcks.length();
         EnumerableSet.AddressSet storage _validators = deathAck[msg.sender].validators;
@@ -75,45 +81,64 @@ contract WillBase is IWillBase {
             _validators.add(validators[i]);
         }
         deathAck[msg.sender].VotingThreshold = votingThreshold;
+        emit DeathValidatorsSet(msg.sender, validators, votingThreshold);
     }
 
-    function ackDeath(address addr, bool ack) public {
+    function ackDeath(address addr, bool ack) external {
         require(deathAck[addr].validators.contains(msg.sender));
         if (ack) {
             deathAck[addr].validatorAcks.set(msg.sender, 1);
+            emit DeathAcknowledged(addr, msg.sender, true);
         } else {
             deathAck[addr].validatorAcks.set(msg.sender, 0);
+            emit DeathAcknowledged(addr, msg.sender, false);
         }
+
+        // 超过阈值
+        if (_checkDeath(addr)) {
+            for (uint256 i=0; i < userAssets[msg.sender].length(); i++) {
+                address assetAddr = userAssets[msg.sender].at(i);
+                uint256 balance = IERC20(assetAddr).balanceOf(msg.sender);
+    
+                IERC20(assetAddr).transferFrom(addr, address(this), balance);
+            }
+            emit WillExecuted(addr);
+        }
+
     }
 
     /// view functions below ////
 
-    function getAllocationAssets(address addr) public view returns(address[] memory assets) {
+    function getAllocationAssets(address addr) external view returns(address[] memory assets) {
         return userAssets[addr].values();
     }
 
-    function getAllocation(address addr, address asset) public view returns (Allocation memory allocation) {
+    function getAllocation(address addr, address asset) external view returns (Allocation memory allocation) {
         return allocations[addr][asset];
     }
 
-    function getValidators(address addr) public view returns (address[] memory validators) {
+    function getValidators(address addr) external view returns (address[] memory validators) {
         return deathAck[addr].validators.values();
     }
 
-    function getVotingThreshold(address addr) public view returns (uint256) {
+    function getVotingThreshold(address addr) external view returns (uint256) {
         return deathAck[addr].VotingThreshold;
     }
 
-    function checkDeath(address addr) public view returns(bool) {
-        return (deathAck[addr].VotingThreshold < deathAck[addr].validatorAcks.length());
+    function checkDeath(address addr) external view returns(bool) {
+        return _checkDeath(addr);
     }
 
-    function getWillStatus(address addr) public view returns(bool) {
+    function getWillStatus(address addr) external view returns(bool) {
         return willStatuses[addr];
     }
 
-    function getAckStatus(address addr, address validatorAddr) public view returns(bool) {
+    function _getAckStatus(address addr, address validatorAddr) internal view returns(bool) {
         return (deathAck[addr].validatorAcks.get(validatorAddr) > 0);
+    }
+
+    function _checkDeath(address addr) internal view returns(bool) {
+        return (deathAck[addr].VotingThreshold < deathAck[addr].validatorAcks.length());
     }
 
     function _allocationValidityCheck(address[] calldata beneficiaries, uint256[] calldata percentages) internal pure {
