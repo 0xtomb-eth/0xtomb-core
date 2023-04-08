@@ -83,25 +83,29 @@ contract WillBase is IWillBase {
             deathAck.validatorAcks.set(msg.sender, 1);
             emit DeathAcknowledged(msg.sender, true);
             if (_checkDeath()) {
-                for (uint256 i=0; i < userAssets.length(); i++) {
-                    address assetAddr = userAssets.at(i);
-                    address[] memory beneficiaries = allocations[assetAddr].beneficiaries;
-                    uint256[] memory percentages = allocations[assetAddr].percentages;
-                    uint256 balance = IERC20(assetAddr).balanceOf(msg.sender);
-                    for (uint256 j=0; j<beneficiaries.length; j++) {
-                        try IERC20(assetAddr).transferFrom(msg.sender, beneficiaries[j], percentages[j] * balance / 100) {
-                        } catch {
-                            emit TransferFailed(assetAddr, beneficiaries[j], percentages[j] * balance);
-                        }
-                    }                
-                }
-                willStatus = true;
-                emit WillExecuted();
+                _executeWill();
             }
         } else {
             deathAck.validatorAcks.set(msg.sender, 0);
             emit DeathAcknowledged(msg.sender, false);
         }
+    }
+
+    function _executeWill() virtual internal {
+        for (uint256 i=0; i < userAssets.length(); i++) {
+            address assetAddr = userAssets.at(i);
+            address[] memory beneficiaries = allocations[assetAddr].beneficiaries;
+            uint256[] memory percentages = allocations[assetAddr].percentages;
+            uint256 balance = IERC20(assetAddr).balanceOf(msg.sender);
+            for (uint256 j=0; j<beneficiaries.length; j++) {
+                try IERC20(assetAddr).transferFrom(msg.sender, beneficiaries[j], percentages[j] * balance / 100) {
+                } catch {
+                    emit TransferFailed(assetAddr, beneficiaries[j], percentages[j] * balance);
+                }
+            }                
+        }
+        willStatus = true;
+        emit WillExecuted();
     }
 
     /// view functions below ////
