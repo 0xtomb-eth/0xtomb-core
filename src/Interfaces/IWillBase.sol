@@ -1,25 +1,24 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.12;
 
-import { WillBase } from "../WillBase.sol";
+import { StructsLibrary } from "src/StructsLibrary.sol";
 
 interface IWillBase {
     function setAllocation(address asset, address[] calldata beneficiaries, uint256[] calldata percentages) external;
 
     function setDeathValidators(address[] calldata validators, uint256 votingThreshold) external;
 
-    function ackDeath(address addr, bool ack) external;
+    function ackDeath(bool ack) external payable;
 
-    function getAllocationAssets(address addr) external view returns(address[] memory assets);
+    function getAllocationAssets() external view returns(address[] memory assets);
 
-    function getAllocation(address addr, address asset) external view returns (WillBase.Allocation memory allocation);
+    function getAllocation(address asset) external view returns (StructsLibrary.Allocation memory);
 
-    function getValidators(address addr) external view returns (address[] memory validators);
+    function getValidators() external view returns (address[] memory validators);
 
-    function getVotingThreshold(address addr) external view returns (uint256);
+    function getVotingThreshold() external view returns (uint256);
 
-    function checkDeath(address addr) external view returns(bool);
+    function checkDeath() external view returns(bool);
 
-    function getWillStatus(address addr) external view returns(bool);    
-
+    function getWillStatus() external view returns(bool);    
 }
