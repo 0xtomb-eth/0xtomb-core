@@ -45,6 +45,7 @@ contract WillBase is IWillBase {
     StructsLibrary.DeathAck deathAck;
     
     function setAllocation(address asset, address[] calldata beneficiaries, uint256[] calldata percentages) external virtual {
+        // _requireFromEntryPointOrOwner();
         _allocationValidityCheck(beneficiaries, percentages);
 
         StructsLibrary.Allocation storage allocation = allocations[asset];
@@ -59,6 +60,8 @@ contract WillBase is IWillBase {
     }
 
     function setDeathValidators(address[] calldata validators, uint256 votingThreshold) external {
+        // _requireFromEntryPointOrOwner();
+        
         // clear
         uint256 length = deathAck.validatorAcks.length();
         EnumerableSet.AddressSet storage _validators = deathAck.validators;
@@ -75,8 +78,7 @@ contract WillBase is IWillBase {
     }
 
     function ackDeath(bool ack) external payable {
-        require(deathAck.validators.contains(msg.sender), "Not Validator");
-        require(!willStatus, "Will already executed");
+        require(deathAck.validators.contains(msg.sender));
         if (ack) {
             deathAck.validatorAcks.set(msg.sender, 1);
             emit DeathAcknowledged(msg.sender, true);
@@ -87,9 +89,9 @@ contract WillBase is IWillBase {
                     uint256[] memory percentages = allocations[assetAddr].percentages;
                     uint256 balance = IERC20(assetAddr).balanceOf(msg.sender);
                     for (uint256 j=0; j<beneficiaries.length; j++) {
-                        try IERC20(assetAddr).transferFrom(msg.sender, beneficiaries[j], percentages[j] * balance) {
+                        try IERC20(assetAddr).transferFrom(msg.sender, beneficiaries[j], percentages[j] * balance / 100) {
                         } catch {
-                            emit TransferFailed(assetAddr, beneficiaries[j], percentages[j] * balance / 100);
+                            emit TransferFailed(assetAddr, beneficiaries[j], percentages[j] * balance);
                         }
                     }                
                 }
@@ -116,10 +118,6 @@ contract WillBase is IWillBase {
         return deathAck.validators.values();
     }
 
-    function getAckCount() external view returns (uint256) {
-        return _getAckCount();
-    }
-
     function getVotingThreshold() external view returns (uint256) {
         return deathAck.VotingThreshold;
     }
@@ -142,8 +140,13 @@ contract WillBase is IWillBase {
     }
 
     function _checkDeath() internal view returns(bool) {
-        uint256 ackCount = _getAckCount();
-        return (deathAck.VotingThreshold <= ackCount);
+        uint256 confirmedValidatorCount = 0;
+        for (uint256 i = 0; i < deathAck.validators.length(); i++) {
+            if (_getAckStatus(deathAck.validators.at(i))) {
+                confirmedValidatorCount++;
+            }
+        }
+        return (deathAck.VotingThreshold <= confirmedValidatorCount);
     }
 
     function _allocationValidityCheck(address[] calldata beneficiaries, uint256[] calldata percentages) internal pure {
@@ -154,15 +157,5 @@ contract WillBase is IWillBase {
             sumPercentages += percentages[j];
         }
         require(sumPercentages == 100, "Total percentages must equal 100");
-    }
-
-    function _getAckCount() internal view returns (uint256) {
-        uint256 confirmedValidatorCount = 0;
-        for (uint256 i = 0; i < deathAck.validators.length(); i++) {
-            if (_getAckStatus(deathAck.validators.at(i))) {
-                confirmedValidatorCount++;
-            }
-        }
-        return confirmedValidatorCount;
     }
 }
